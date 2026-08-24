@@ -10,20 +10,6 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 authors = [{ name = "Varun Babbar", email = "varundbabbar@gmail.com" }]
-keywords = [
-    "rashomon",
-    "generalized-additive-models",
-    "gam",
-    "mcmc",
-    "interpretability",
-    "diversity",
-]
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Intended Audience :: Science/Research",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-]
 dependencies = [
     "numpy>=1.21",
     "pandas>=1.3",
