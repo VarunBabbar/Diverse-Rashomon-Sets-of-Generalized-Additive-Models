@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=77.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "GRAM: GAM Rashomon Sets with Adaptive MCMC — sampling diverse generalized additive models from the Rashomon set."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
 authors = [{ name = "Varun Babbar", email = "varundbabbar@gmail.com" }]
 keywords = [
     "rashomon",
@@ -36,4 +36,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "ruff>=0.1"]
 
+[tool.setuptools]
+# Only ``gram`` is a package; datasets/ is data, not importable code.
 packages = ["gram"]
