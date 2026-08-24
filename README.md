@@ -19,6 +19,7 @@ X, y, feature_names, feature_groups = gram.binarize_data(df)
 sampler = gram.MCMCRashomonSampler(X, y, eps=0.025, sigma2=0.05, p_feat=1e-4, feature_groups=feature_groups)
 
 result = sampler.sample(n_steps=5000, proposal="adaptive_resize", mh_variant="repulsive", finetune_coordinate = True, diversity_fn="prediction_hamming")
+# make Rashomon set as diverse as possible with respect to diversity_fn. Options: "prediction_hamming", "jaccard", "monotonicity_entropy", "l1". 
 
 print(result.w_models.shape, result.best_error, result.error_bound)
 
