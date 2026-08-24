@@ -1,6 +1,6 @@
 # GRAM: GAM Rashomon Sets with Adaptive MCMC
 
-MCMC sampler for diverse GAMs in the Rashomon set, plus the diversity experiment driver.
+Markov-Chain-Monte-Carlo based sampler for uncovering diverse Generalized Additive Models (GAMs) in the Rashomon set.
 
 ## Install
 
