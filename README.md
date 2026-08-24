@@ -15,9 +15,13 @@ import gram
 
 X, y, feature_names, feature_groups = gram.binarize_data(df) 
 # df assumed to have numerical values (continuous, binary, or ordinal). The last column is the target.
+
 sampler = gram.MCMCRashomonSampler(X, y, eps=0.025, sigma2=0.05, p_feat=1e-4, feature_groups=feature_groups)
+
 result = sampler.sample(n_steps=5000, proposal="adaptive_resize", mh_variant="repulsive", finetune_coordinate = True, diversity_fn="prediction_hamming")
+
 print(result.w_models.shape, result.best_error, result.error_bound)
+
 # result.w_models[i] is the weight vector for the i-th model. result.w_models[i][j] is the weight for the j-th feature, i.e. feature_names[j]. 
 ```
 
