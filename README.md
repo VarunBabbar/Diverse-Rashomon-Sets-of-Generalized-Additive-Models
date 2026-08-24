@@ -27,12 +27,8 @@ print(result.w_models.shape, result.best_error, result.error_bound)
 
 ### The result
 
-`sample` returns a `RashomonResult`. The Rashomon set is defined on the
-**negative log posterior** (NLL + L2 prior): a candidate is kept if
-`nll <= nll_bound`, where `nll_bound = best_nll * (1 + eps)` (or the explicit
-`rashomon_loss_bound`, if given). Every array below is already filtered to that
-set, and row `i` of `w_models`, `support_sets`, `errors`, and `nlls` describes
-the same model.
+`sample` returns a `RashomonResult`. All samples in the Rashomon set obey
+`nll <= nll_bound`, where `nll_bound = best_nll * (1 + eps)`. 
 
 | Field | Meaning |
 |---|---|
