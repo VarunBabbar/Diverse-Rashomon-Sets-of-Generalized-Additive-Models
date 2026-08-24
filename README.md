@@ -33,7 +33,7 @@ print(result.w_models.shape, result.best_error, result.error_bound)
 | Field | Meaning |
 |---|---|
 | `w_models` | `(n_models, p)` weights of the kept models. Zero entries = features outside that model's support. This is the Rashomon set. |
-| `w_opt` | `(p,)` weights of the single lowest-NLL model found (the reference the bound is measured against). This is not necessarily the most accurate model, just the model that best traversed the sparsity-accuracy tradeoff.|
+| `w_opt` | `(p,)` weights of the single lowest-NLL model found. |
 | `support_sets` | Column indices active in each kept model — the feature/threshold subset it uses. |
 | `errors`, `best_error` | Training 0-1 error per kept model, and the error of `w_opt`. |
 | `error_bound` | Worst training error in the set — how much accuracy you give up at the edge of the set. |
