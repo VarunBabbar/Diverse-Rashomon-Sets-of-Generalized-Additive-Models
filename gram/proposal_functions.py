@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import warnings
 from typing import Dict, Optional, Tuple
 
 import numpy as np
@@ -538,7 +539,11 @@ def make_mixture_proposal(proposal_fns, weights=None):
 def compute_correlation_scores(X, y):
     """Absolute Pearson correlation of each feature with y."""
     out = np.zeros(X.shape[1])
-    for j in range(X.shape[1]):
-        r, _ = pearsonr(X[:, j], y)
-        out[j] = np.abs(r) if np.isfinite(r) else 0.0
+    # A constant column has no correlation to report: scipy warns and returns
+    # NaN, which the isfinite check below turns into a score of 0.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for j in range(X.shape[1]):
+            r, _ = pearsonr(X[:, j], y)
+            out[j] = np.abs(r) if np.isfinite(r) else 0.0
     return out

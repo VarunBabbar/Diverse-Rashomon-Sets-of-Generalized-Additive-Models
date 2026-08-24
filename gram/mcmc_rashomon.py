@@ -361,7 +361,8 @@ class MCMCRashomonSampler:
     @staticmethod
     def compute_feature_correlation_matrix(X: np.ndarray) -> np.ndarray:
         """Compute NaN-safe absolute pairwise feature correlation matrix."""
-        corr = np.corrcoef(X, rowvar=False)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            corr = np.corrcoef(X, rowvar=False)
         corr = np.nan_to_num(corr, nan=0.0, posinf=0.0, neginf=0.0)
         return np.abs(corr).astype(np.float32, copy=False)
 

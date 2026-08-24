@@ -27,15 +27,12 @@ def fit_boosted_tree(X, y, n_est=10, lr=0.1, d=1):
 
 
 def cut(X, ts):
-    df = X.copy()
-    colnames = X.columns
-    for j in range(len(ts)):
-        for s in range(len(ts[j])):
-            X[colnames[j]+'<='+str(ts[j][s])] = 1
-            k = df[colnames[j]] > ts[j][s]
-            X.loc[k, colnames[j]+'<='+str(ts[j][s])] = 0
-        X = X.drop(colnames[j], axis=1)
-    return X
+    blocks, names = [], []
+    for j, col in enumerate(X.columns):
+        thr = np.asarray(ts[j])
+        blocks.append((X[col].to_numpy()[:, None] <= thr).astype(int))
+        names.extend(f"{col}<={t}" for t in thr)
+    return pd.DataFrame(np.hstack(blocks), columns=names, index=X.index)
 
 # compute the thresholds
 
