@@ -31,7 +31,7 @@ from functools import partial
 from tqdm import tqdm
 from scipy.optimize import minimize
 import time
-from gram.binarizer import binarize_dataset as binarize_dataset_gbdt
+from gram.binarizer import binarize_dataset as binarize_dataset_gbdt, sort_feature_clumps
 import random
 from gram.diversity import (
     DEFAULT_DIVERSITY_FN,
@@ -141,6 +141,8 @@ def binarize_data(
     if extra_columns:
         X_binary = np.column_stack([X_binary] + extra_columns)
         header.extend(extra_headers)
+
+    X_binary, header = sort_feature_clumps(X_binary, header)
 
     # 3. Assemble X (intercept first) and the per-feature column groups.
     X = np.hstack([np.ones((X_binary.shape[0], 1)), X_binary])

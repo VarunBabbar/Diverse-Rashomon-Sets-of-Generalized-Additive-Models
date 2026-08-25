@@ -29,10 +29,27 @@ def fit_boosted_tree(X, y, n_est=10, lr=0.1, d=1):
 def cut(X, ts):
     blocks, names = [], []
     for j, col in enumerate(X.columns):
-        thr = np.asarray(ts[j])
+        thr = np.sort(np.asarray(ts[j], dtype=float))
         blocks.append((X[col].to_numpy()[:, None] <= thr).astype(int))
         names.extend(f"{col}<={t}" for t in thr)
     return pd.DataFrame(np.hstack(blocks), columns=names, index=X.index)
+
+
+def sort_feature_clumps(X_cols: np.ndarray, header: list) -> tuple[np.ndarray, list]:
+    """Reorder columns: one clump per feature, ascending threshold within each clump."""
+    feat_order, by_feat, plain = [], {}, []
+    for i, name in enumerate(header):
+        if "<=" in name:
+            feat, t = name.split("<=", 1)
+            feat = feat.strip()
+            if feat not in by_feat:
+                feat_order.append(feat)
+                by_feat[feat] = []
+            by_feat[feat].append((float(t.strip()), i))
+        else:
+            plain.append(i)
+    order = plain + [i for f in feat_order for _, i in sorted(by_feat[f])]
+    return X_cols[:, order], [header[i] for i in order]
 
 # compute the thresholds
 

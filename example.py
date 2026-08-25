@@ -12,11 +12,11 @@ sigma2 = 0.05 # Regularization parameter for a given support set
 eps = 0.025 # note that the eps is with respect to the regularized loss, so the accuracy ranges may not reflect the eps you want to use. Adjust accordingly. 
 p_feat = 1e-4 # Support set sparsity prior. 
 
-n_steps = 500 # Total number of steps to run for the MCMC sampler.
+n_steps = 1000 # Total number of steps to run for the MCMC sampler.
 diversity_fn = "monotonicity_entropy" # maximize Rashomon set with respect to this diversity function. 
                                     # Options: "prediction_hamming", "jaccard", "monotonicity_entropy", "l1"
 
-dataset = "compas"
+dataset = "fico"
 # 1. Load dataset. The last column is the binary target.
 data = pd.read_csv(f"datasets/{dataset}.csv").reset_index(drop=True)
 
