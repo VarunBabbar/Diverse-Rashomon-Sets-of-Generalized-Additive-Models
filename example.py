@@ -30,6 +30,7 @@ sampler = gram.MCMCRashomonSampler(
     eps=eps,
     sigma2=sigma2,
     p_feat=p_feat,
+    feature_names=feature_names,
     feature_groups=feature_groups,
 )
 result = sampler.sample(
@@ -40,18 +41,22 @@ result = sampler.sample(
     diversity_fn=diversity_fn,
     )
 print(f"{result.w_models.shape[0]} models, "
-      f"training error {result.best_error:.4f} -> {result.error_bound:.4f}")
+      f"training error {result.best_error:.4f} -> {result.error_bound:.4f}",
+      "feature names binned: ", result.feature_names_binned,
+      "w_models_binned: ", result.w_models_binned,
+      "X_binned shape: ", result.X_binned.shape,
+      )
 # result.w_models[i] is the weight vector for the i-th model. result.w_models[i][j] is the weight for the j-th feature, i.e. feature_names[j]. 
 
 # 4. Plot every model's shape function, one panel per feature.
 gram.plot_gam_shapes(
     result,
-    feature_groups,
+    result.feature_groups,
     data,
-    feature_names=feature_names,
     save_path=f"{dataset}_gam_shapes.png",
+    max_models=2000,
     alpha=0.05,
-    max_models=5000,
-    normalize=False
 )
+
+
 print(f"Saved {dataset}_gam_shapes.png")

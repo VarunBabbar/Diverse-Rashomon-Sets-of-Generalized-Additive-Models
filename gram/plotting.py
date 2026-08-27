@@ -19,6 +19,16 @@ from gram.mcmc_rashomon import RashomonResult, _parse_threshold_from_colname
 _ZERO_TOL = 1e-12
 
 
+def _parse_upper_threshold_from_bin_label(label: str) -> Optional[float]:
+    """Upper bound from a disjoint bin label like ``34.0 < age <= 35.0``."""
+    if "<=" not in label:
+        return None
+    try:
+        return float(label.rsplit("<=", 1)[1].strip())
+    except (ValueError, IndexError):
+        return None
+
+
 def _normalize_shape(shape):
     """Center (subtract mean) and normalize (divide by L2 norm) a shape vector."""
     shape = shape - shape.mean()
@@ -39,6 +49,7 @@ def plot_gam_shapes(
     save_path: Optional[str] = None,
     title_suffix: str = "",
     feature_names: Optional[List[str]] = None,
+    binned: bool = True,
 ):
     """
     Plot GAM shape functions for the features that are actually used.
@@ -48,13 +59,15 @@ def plot_gam_shapes(
     non-zero shape function; features whose weights are zero in every such
     model are skipped entirely and do not take up a subplot.
 
-    With threshold binarization (column j = ``feature <= v_j``), the shape
-    function at input value x equals the sum of weights whose threshold is
-    >= x, i.e. a reverse cumulative sum of the weight vector.
+    With ladder weights (``binned=False``), columns are ``feature <= v_j`` and
+    the shape at input value x is a reverse cumulative sum of the weight
+    vector. With binned weights (``binned=True``), uses ``w_models_binned``,
+    ``w_opt_binned``, and ``feature_names_binned``; each weight is the disjoint
+    bin contribution and is plotted directly (no cumsum).
 
-    When ``normalize=True`` (default), each shape function is centered
-    (mean-subtracted) and divided by its L2 norm so that all features are
-    shown on a comparable scale.
+    When ``normalize=True``, each shape function is centered (mean-subtracted)
+    and divided by its L2 norm so that all features are shown on a comparable
+    scale.
 
     All Rashomon-set models are drawn in red; the optimal model in dark gray.
 
@@ -62,26 +75,59 @@ def plot_gam_shapes(
         feature_names: Optional list of column names (e.g. ``feat<=v``). When
             provided and L1 feature selection reduces columns, thresholds are
             extracted from these names for correct alignment with indices.
+            Ignored for naming when ``binned=True`` (uses
+            ``result.feature_names_binned`` unless this argument is passed).
+        binned: If True, plot disjoint-bin weights from ``result.w_models_binned``
+            and ``result.w_opt_binned`` instead of ladder weights.
     """
     import matplotlib.pyplot as plt
 
+    if binned:
+        if (
+            result.w_models_binned is None
+            or result.w_opt_binned is None
+            or result.feature_names_binned is None
+        ):
+            raise ValueError(
+                "binned=True requires w_models_binned, w_opt_binned, and "
+                "feature_names_binned on RashomonResult (run sample() with "
+                "feature_names and feature_groups passed to the sampler)."
+            )
+        w_all = result.w_models_binned
+        w_opt = result.w_opt_binned
+        column_names = (
+            feature_names if feature_names is not None else result.feature_names_binned
+        )
+    else:
+        w_all = result.w_models
+        w_opt = result.w_opt
+        column_names = (
+            feature_names if feature_names is not None else result.feature_names
+        )
+
     X_raw = data.iloc[:, :-1]
 
-    w_all = result.w_models
     if w_all.shape[0] > max_models:
         idx = np.random.choice(w_all.shape[0], max_models, replace=False)
         w_all = w_all[idx]
+
+    ladder_names = result.feature_names if result.feature_names is not None else column_names
 
     # Resolve thresholds per feature and drop features that are unused (all
     # weights zero) or whose thresholds cannot be aligned with the indices.
     plotted = []
     for feat, indices in feature_groups.items():
         thresholds_raw = np.sort(np.unique(X_raw[feat].values))
-        if feature_names is not None and len(indices) != len(thresholds_raw):
+        if column_names is not None and len(indices) != len(thresholds_raw):
             thresholds = []
             for i in indices:
-                if i < len(feature_names):
-                    v = _parse_threshold_from_colname(feature_names[i], feat)
+                if i < len(column_names):
+                    if binned:
+                        v = _parse_upper_threshold_from_bin_label(column_names[i])
+                    else:
+                        v = _parse_threshold_from_colname(column_names[i], feat)
+                    if v is None and not binned and i < len(ladder_names):
+                        v = _parse_threshold_from_colname(ladder_names[i], feat)
                     if v is not None:
                         thresholds.append(v)
             thresholds = np.array(thresholds) if thresholds else np.array([])
@@ -92,7 +138,7 @@ def plot_gam_shapes(
             continue
 
         used = (np.any(np.abs(w_all[:, indices]) > _ZERO_TOL)
-                or np.any(np.abs(result.w_opt[indices]) > _ZERO_TOL))
+                or np.any(np.abs(w_opt[indices]) > _ZERO_TOL))
         if not used:
             continue
 
@@ -116,13 +162,10 @@ def plot_gam_shapes(
 
     for ax, (feat, indices, thresholds, perm) in zip(axes_flat, plotted):
         def _shape(w_full):
-            """Reverse cumulative sum of the weights in ascending-threshold order.
-
-            The columns of a feature are not stored sorted by threshold, so the
-            weights must be permuted *before* accumulating: sorting the partial
-            sums afterwards is not the same thing.
-            """
-            return np.cumsum(w_full[indices][perm][::-1])[::-1]
+            weights = w_full[indices][perm]
+            if binned:
+                return weights
+            return np.cumsum(weights[::-1])[::-1]
 
         for w in w_all:
             shape = _shape(w)
@@ -131,14 +174,19 @@ def plot_gam_shapes(
             ax.step(thresholds, shape, where="post",
                     color="red", alpha=alpha, linewidth=0.8)
 
-        shape_opt = _shape(result.w_opt)
+        shape_opt = _shape(w_opt)
         if normalize:
             shape_opt = _normalize_shape(shape_opt)
         ax.step(thresholds, shape_opt, where="post",
                 color="dimgray", linewidth=2.5, label="optimal")
 
         ax.set_xlabel(feat, fontsize=14)
-        ylabel = "normalized shape" if normalize else "predicted logit"
+        if normalize:
+            ylabel = "normalized shape"
+        elif binned:
+            ylabel = "bin weight"
+        else:
+            ylabel = "predicted logit"
         ax.set_ylabel(ylabel, fontsize=14)
         ax.tick_params(labelsize=11)
         ax.legend(fontsize=10)
@@ -147,6 +195,8 @@ def plot_gam_shapes(
         ax.set_visible(False)
 
     title = "GAM Shape Functions (Rashomon Set)" + title_suffix
+    if binned:
+        title += " — binned weights"
     if normalize:
         title += " — centered & normalized"
     fig.suptitle(title, fontsize=15, y=1.02)

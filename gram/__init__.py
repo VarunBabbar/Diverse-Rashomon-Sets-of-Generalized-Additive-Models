@@ -12,7 +12,8 @@ re-exports the public API under one namespace::
     import gram
 
     X, y, feature_names, feature_groups = gram.binarize_data(df)
-    sampler = gram.MCMCRashomonSampler(X, y, eps=0.05, feature_groups=feature_groups)
+    sampler = gram.MCMCRashomonSampler(X, y, eps=0.05, feature_names=feature_names,
+                                       feature_groups=feature_groups)
     result = sampler.sample(n_steps=5000, proposal="swap")
 """
 

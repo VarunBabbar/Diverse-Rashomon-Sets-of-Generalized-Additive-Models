@@ -189,8 +189,170 @@ class RashomonResult:
     nlls: Optional[np.ndarray] = None  # NLLs for returned Rashomon-set models
     all_nlls: Optional[np.ndarray] = None  # NLLs for all explored candidate models
     nll_bound: Optional[float] = None  # NLL threshold used to filter Rashomon-set models
+    feature_names: Optional[List[str]] = None
+    feature_groups: Optional[Dict[str, List[int]]] = None
+    w_models_binned: Optional[np.ndarray] = None  # disjoint-bin weights (see convert_gams_to_binned_representation)
+    w_opt_binned: Optional[np.ndarray] = None
+    bin_labels: Optional[Dict[str, List[str]]] = None
+    feature_names_binned: Optional[List[str]] = None  # column-aligned disjoint bin names
+    X: Optional[np.ndarray] = None  # (n, p) cumulative ladder design matrix
+    X_binned: Optional[np.ndarray] = None  # (n, p) disjoint-bin design matrix
 
+    @staticmethod
+    def _ladder_weights_to_bin_weights(ladder_w: np.ndarray) -> np.ndarray:
+        """Reverse cumulative sum along the last axis: bin_i = sum(ladder_w[i:])."""
+        ladder_w = np.asarray(ladder_w, dtype=np.float64)
+        if ladder_w.ndim == 1:
+            if ladder_w.size == 0:
+                return ladder_w
+            return np.cumsum(ladder_w[::-1])[::-1]
+        return np.cumsum(ladder_w[..., ::-1], axis=-1)[..., ::-1]
 
+    @staticmethod
+    def _convert_weights_to_binned(
+        weights: np.ndarray,
+        feature_names: List[str],
+        feature_groups: Dict[str, List[int]],
+    ) -> np.ndarray:
+        """Convert ladder weights to disjoint bin weights for a (n_models, p) matrix."""
+        out = np.asarray(weights, dtype=np.float64).copy()
+        if out.ndim != 2:
+            raise ValueError(
+                f"weights must be 2D (n_models, n_features), got shape {out.shape}"
+            )
+        for feat, indices in feature_groups.items():
+            pairs = []
+            for i in indices:
+                t = _parse_threshold_from_colname(feature_names[i], feat)
+                if t is not None:
+                    pairs.append((i, t))
+            if not pairs:
+                continue
+            pairs.sort(key=lambda x: x[1])
+            ladder_idx = np.array([i for i, _ in pairs], dtype=int)
+            out[:, ladder_idx] = RashomonResult._ladder_weights_to_bin_weights(
+                out[:, ladder_idx]
+            )
+        return out
+
+    @staticmethod
+    def _bin_labels_for_feature(
+        feat: str,
+        indices: List[int],
+        feature_names: List[str],
+    ) -> List[str]:
+        pairs = []
+        for i in indices:
+            t = _parse_threshold_from_colname(feature_names[i], feat)
+            if t is not None:
+                pairs.append((i, t))
+        pairs.sort(key=lambda x: x[1])
+        labels: List[str] = []
+        for k, (_, t) in enumerate(pairs):
+            if k == 0:
+                labels.append(f"{feat} <= {t}")
+            else:
+                labels.append(f"{pairs[k - 1][1]} < {feat} <= {t}")
+        return labels
+
+    @staticmethod
+    def _build_feature_names_binned(
+        feature_names: List[str],
+        feature_groups: Dict[str, List[int]],
+    ) -> List[str]:
+        """Flat column names aligned with ``w_*_binned`` (disjoint bins per feature)."""
+        names_binned = list(feature_names)
+        for feat, indices in feature_groups.items():
+            labels = RashomonResult._bin_labels_for_feature(
+                feat, indices, feature_names,
+            )
+            pairs = []
+            for i in indices:
+                t = _parse_threshold_from_colname(feature_names[i], feat)
+                if t is not None:
+                    pairs.append((i, t))
+            pairs.sort(key=lambda x: x[1])
+            for idx, label in zip([i for i, _ in pairs], labels):
+                names_binned[idx] = label
+        return names_binned
+
+    @staticmethod
+    def _build_X_binned(
+        X: np.ndarray,
+        feature_names: List[str],
+        feature_groups: Dict[str, List[int]],
+    ) -> np.ndarray:
+        """Disjoint-bin design matrix aligned with binned weights (same shape as ``X``)."""
+        X_b = np.asarray(X, dtype=np.float64).copy()
+        for feat, indices in feature_groups.items():
+            pairs = []
+            for i in indices:
+                t = _parse_threshold_from_colname(feature_names[i], feat)
+                if t is not None:
+                    pairs.append((i, t))
+            if not pairs:
+                continue
+            pairs.sort(key=lambda x: x[1])
+            ladder_idx = np.array([i for i, _ in pairs], dtype=int)
+            ladder = X_b[:, ladder_idx]
+            bins = np.zeros_like(ladder)
+            for j in range(ladder.shape[1]):
+                if j == 0:
+                    bins[:, j] = ladder[:, j]
+                else:
+                    bins[:, j] = ladder[:, j] * (1.0 - ladder[:, j - 1])
+            X_b[:, ladder_idx] = bins
+        return X_b
+
+    def convert_gams_to_binned_representation(self) -> "RashomonResult":
+        """
+        Convert cumulative ``feat<=t`` ladder weights to disjoint bin weights.
+
+        Populates ``w_models_binned``, ``w_opt_binned``, ``bin_labels``,
+        ``feature_names_binned``, and ``X_binned`` (when ``X`` is set) on this
+        result. Uses ``self.feature_names`` and
+        ``self.feature_groups``. Columns stay aligned with ``feature_names``
+        (intercept and plain binary features unchanged). For ascending thresholds
+        ``t1, t2, ...`` with ladder weights ``w1, w2, ...`` on ``feat<=t1``,
+        ``feat<=t2``, ...::
+
+            bin1 = w1 + w2 + ...   # feat <= t1
+            bin2 = w2 + ...        # t1 < feat <= t2
+            bin3 = w3 + ...        # t2 < feat <= t3
+            ...
+
+        Example: thresholds 34, 35, 36 with ladder weights 1, 2, 3 become
+        bin weights 6, 5, 3.
+
+        Returns:
+            ``self``, with binned-weight attributes set.
+        """
+        if self.feature_names is None or self.feature_groups is None:
+            raise ValueError(
+                "feature_names and feature_groups must be set on RashomonResult "
+                "(pass them to MCMCRashomonSampler and run sample())."
+            )
+        feature_names = self.feature_names
+        feature_groups = self.feature_groups
+
+        self.w_models_binned = self._convert_weights_to_binned(
+            self.w_models, feature_names, feature_groups,
+        )
+        self.w_opt_binned = self._convert_weights_to_binned(
+            self.w_opt.reshape(1, -1), feature_names, feature_groups,
+        )[0]
+        self.bin_labels = {
+            feat: self._bin_labels_for_feature(feat, indices, feature_names)
+            for feat, indices in feature_groups.items()
+        }
+        self.feature_names_binned = self._build_feature_names_binned(
+            feature_names, feature_groups,
+        )
+        if self.X is not None:
+            self.X_binned = self._build_X_binned(
+                self.X, feature_names, feature_groups,
+            )
+        return self
 
 
 class MCMCRashomonSampler:
@@ -210,6 +372,7 @@ class MCMCRashomonSampler:
         eps: float = 0.05,
         sigma2: float = 10.0,
         p_feat: float = 0.01,
+        feature_names: Optional[List[str]] = None,
         feature_groups: Optional[Dict[str, List[int]]] = None,
         lambda_smooth: float = 0.0,
         seed: Optional[int] = None,
@@ -225,6 +388,9 @@ class MCMCRashomonSampler:
                             Enables group-level swap proposals. For the smoothness
                             prior, columns within each group are assumed to be
                             ordered by threshold.
+            feature_names: Optional list of column names aligned with ``X``
+                           (index 0 is typically ``intercept``). Stored on
+                           ``RashomonResult`` after ``sample()``.
             lambda_smooth: Smoothness penalty applied to the posterior score
                           (NOT to the fit). The logistic regression is still
                           fitted with the plain L2 prior via sklearn; after
@@ -262,7 +428,13 @@ class MCMCRashomonSampler:
         self.eps = eps
         self.sigma2 = sigma2
         self.p_feat = p_feat
+        self.feature_names = list(feature_names) if feature_names is not None else None
         self.feature_groups = feature_groups
+        if self.feature_names is not None and len(self.feature_names) != self.p:
+            raise ValueError(
+                f"feature_names length ({len(self.feature_names)}) must match "
+                f"X.shape[1] ({self.p})"
+            )
         self.lambda_smooth = float(lambda_smooth)
         self._smooth_enabled: bool = self.lambda_smooth > 0.0
         # Precompute smoothness-prior structure: ordered column indices per
@@ -1834,7 +2006,7 @@ class MCMCRashomonSampler:
         print(f"Best error: {best_err:.4f}, Rashomon set: {mask.sum()}/{len(errs)} models, runtime: {rt:.1f}s")
         print(f"MH scoring: finetuned {n_finetune} times, full optimization {n_full} times")
 
-        return RashomonResult(
+        result = RashomonResult(
             w_models=w_out,
             w_opt=w_opt,
             support_sets=s_out,
@@ -1854,4 +2026,10 @@ class MCMCRashomonSampler:
             nlls=nlls_arr[mask],
             all_nlls=nlls_arr,
             nll_bound=nll_bound,
+            feature_names=self.feature_names,
+            feature_groups=self.feature_groups,
+            X=self.X.copy(),
         )
+        if result.feature_names is not None and result.feature_groups is not None:
+            result.convert_gams_to_binned_representation()
+        return result

@@ -27,7 +27,7 @@ Usage:
 import numpy as np
 import warnings
 from sklearn.linear_model import LogisticRegression
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 from time import time
 from gram.mcmc_rashomon import RashomonResult
 import torch
@@ -44,6 +44,8 @@ class EllipsoidSampler:
         y: np.ndarray,
         eps: float = 0.05,
         sigma2: float = 10.0,
+        feature_names: Optional[List[str]] = None,
+        feature_groups: Optional[Dict[str, List[int]]] = None,
     ):
         """
         Args:
@@ -51,12 +53,16 @@ class EllipsoidSampler:
             y: (n,) binary labels in {0, 1}.
             eps: Rashomon set tolerance.
             sigma2: Prior variance on weights (= C in sklearn).
+            feature_names: Optional column names aligned with ``X``.
+            feature_groups: Optional per-feature column index lists.
         """
         self.X = np.asarray(X, dtype=np.float64)
         self.y = np.asarray(y, dtype=np.float64).ravel()
         self.n, self.p = self.X.shape
         self.eps = eps
         self.sigma2 = sigma2
+        self.feature_names = list(feature_names) if feature_names is not None else None
+        self.feature_groups = feature_groups
 
     # ================================================================== #
     #  Fitting
@@ -413,4 +419,6 @@ class EllipsoidSampler:
             n_accepted=int(mask.sum()),
             runtime=rt,
             acceptance_rate=float(precision),
+            feature_names=self.feature_names,
+            feature_groups=self.feature_groups,
         )
