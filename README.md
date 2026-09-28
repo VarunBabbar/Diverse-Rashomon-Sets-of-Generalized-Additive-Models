@@ -1,4 +1,4 @@
-# GRAM: GAM Rashomon sets with Adaptive MCMC
+# GRAM: GAM Rashomon sets with Adaptive MCMC (NeurIPS '26)
 
 Markov-Chain-Monte-Carlo based sampler for uncovering diverse Generalized Additive Models (GAMs) in the Rashomon set.
 
